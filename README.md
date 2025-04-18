@@ -109,12 +109,15 @@ void loop() {
     // Read latest values
     double pres = spl.readPressure();
     double temp = spl.readTemperature();
+    double altitude = spl.calcAltitude();
     // Print to serial
     Serial.print("Pres: ");
     Serial.print(pres, 3);
     Serial.print(" Pa, Temp: ");
     Serial.print(temp, 3);
-    Serial.println(" C");
+    Serial.print(" C, Altitude: ");
+    Serial.print(altitude, 3);
+    Serial.println(" m");
   }//if
 
 }//loop()
@@ -136,6 +139,8 @@ For more examples, refer to the `examples` folder in this repository.
   - Reads the current pressure in Pascals (Pa).
 - `double readTemperature();`
   - Reads the current temperature in degrees Celsius (°C).
+- `double calcAltitude();`
+  - Calculate altitude (M).
 
 ### Configuration
 - `void setMode(SPL07_Modes mode);`

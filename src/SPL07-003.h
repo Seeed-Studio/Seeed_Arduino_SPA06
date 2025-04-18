@@ -158,6 +158,7 @@ class SPL07_003 {
     // Reading Values
     double readPressure();
     double readTemperature();
+    double calcAltitude();
 
 }; //SPL07_003 Class
 

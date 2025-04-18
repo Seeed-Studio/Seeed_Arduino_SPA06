@@ -395,6 +395,19 @@ double SPL07_003::readTemperature() {
   return tComp;
 }//readTemperature()
 
+/*
+ * Returns the calculated altitude value
+ */
+double SPL07_003::calcAltitude() {
+  double altitude = 0;
+  double pres = readPressure();
+
+  altitude = (pres / 100 / 1013.25);
+  altitude = 1 - pow(altitude, (1 / 5.255));
+  altitude = 44330 * (altitude);
+
+  return altitude;
+}
 
 /*
    Performs a software reset of the SPL07 chip. Blocks until ready.

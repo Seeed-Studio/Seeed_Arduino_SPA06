@@ -57,12 +57,15 @@ void loop() {
     // Read latest values
     double pres = spl.readPressure();
     double temp = spl.readTemperature();
+    double altitude = spl.calcAltitude();
     // Print to serial
     Serial.print("Pres: ");
     Serial.print(pres, 3);
     Serial.print(" Pa, Temp: ");
     Serial.print(temp, 3);
-    Serial.println(" C");
+    Serial.print(" C, Altitude: ");
+    Serial.print(altitude, 3);
+    Serial.println(" m");
   }//if
 
 }//loop()
