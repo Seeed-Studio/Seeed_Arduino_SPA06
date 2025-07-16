@@ -26,6 +26,9 @@ This is an Arduino library for the **SPA06-003** pressure and temperature sensor
   - Fully compatible with the Arduino Wire library.
   - Supports both default and alternate I2C addresses.
 
+- **SPI Communication**
+  - Fully compatible with the Arduino SPI library.
+
 - **Cross-Platform Compatibility**:
   - Compatible with all Arduino boards and architectures.
 
@@ -48,7 +51,7 @@ This is an Arduino library for the **SPA06-003** pressure and temperature sensor
 
 ## Getting Started
 
-### Hardware Setup
+### Hardware Setup By I2C
 1. Connect the SPA06-003 sensor to your Arduino board via I2C:
    - **VCC**: 3.3V or 5V (depending on your board).
    - **GND**: Ground.
@@ -56,6 +59,15 @@ This is an Arduino library for the **SPA06-003** pressure and temperature sensor
    - **SDA**: I2C data pin.
 
 2. Ensure the I2C address matches the sensor configuration (default: `0x77`).
+
+### Hardware Setup By SPI
+1. Connect the SPA06-003 sensor to your Arduino board via SPI:
+   - **VCC**: 3.3V or 5V (depending on your board).
+   - **GND**: Ground.
+   - **CS** : Use the SS pin defined by yourself
+   - **SCK**: SPI clock pin.
+   - **SDO**: SPI MISO pin.
+   - **SDI**: SPI MOSI pin.
 
 ### Example Code
 
@@ -85,7 +97,7 @@ void setup() {
   Wire.begin();
 
   // Connect to SPL07-003
-  if (spl.begin(SPL07_ADDR) == false) {
+  if (spl.begin(SPL07_ADDR,&Wire) == false) {
     Serial.println("Error initializing SPL07-003 :(");
     while (1) {}
   }//if
