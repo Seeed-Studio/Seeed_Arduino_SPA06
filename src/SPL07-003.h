@@ -9,6 +9,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <SPI.h>
 
 #define SPL07_ADDR_DEF 0x77   // Default I2C addr (SDO=high)
 #define SPL07_ADDR_ALT 0x76   // Alternate I2C addr (SDO=low)
@@ -91,74 +92,83 @@ typedef enum {
   SPL07_TSRC_MEMS,  // External temperature sensor of pressure sensor MEMS element, if any
 } SPL07_Temperature_Source;
 
+typedef enum {
+  SPL07_None,
+  SPL07_IIC,
+  SPL07_SPI,
+} SPL07_Work_Mode;
 
 
 /*
  * Class for interfacing with the SPL07_003 (or similar) over I2C.
 */
 class SPL07_003 {
-  private:
-    // I2C Communication
-    uint8_t _i2cAddr;
-    TwoWire *_i2cWire;
+private:
+  // I2C Communication
+  uint8_t _i2cAddr;
+  TwoWire *_i2cWire;
+  uint8_t _csPin;
+  SPIClass* _spi;
+  SPL07_Work_Mode _workMode;
 
-    // Bit Manipulation Helpers
-    uint8_t _isolateBit(uint32_t val, uint8_t index);
-    int32_t _twosCompliment(uint32_t raw, uint8_t numBits);
+  // Bit Manipulation Helpers
+  uint8_t _isolateBit(uint32_t val, uint8_t index);
+  int32_t _twosCompliment(uint32_t raw, uint8_t numBits);
 
-    // Sensor Register Interface
-    uint8_t _regReadByte(uint8_t reg);
-    uint8_t _regReadBytes(uint8_t reg, uint8_t arr[], uint8_t len);
-    uint32_t _regReadInteger(uint8_t reg, uint8_t len);
-    void _regWriteByte(uint8_t reg, uint8_t val);
-    void _regModifyByte(uint8_t reg, uint8_t msb, uint8_t lsb, uint8_t val);
+  // Sensor Register Interface
+  uint8_t _regReadByte(uint8_t reg);
+  uint8_t _regReadBytes(uint8_t reg, uint8_t arr[], uint8_t len);
+  uint32_t _regReadInteger(uint8_t reg, uint8_t len);
+  void _regWriteByte(uint8_t reg, uint8_t val);
+  void _regModifyByte(uint8_t reg, uint8_t msb, uint8_t lsb, uint8_t val);
 
-    // Calibration Coefficients & settings
-    void _readCoefficients();
-    int16_t _c0, _c1, _c31, _c40;      //12-bit, 2s compl.
-    int32_t _c00, _c10;            //20-bit, 2s compl.
-    int16_t _c01, _c11, _c21, _c20, _c30;  //16-bit, 2s compl.
-    double _presOffset = 0;    // Pascals
-    double _tempOffset = 0;    // Degrees C
+  // Calibration Coefficients & settings
+  void _readCoefficients();
+  int16_t _c0, _c1, _c31, _c40;      //12-bit, 2s compl.
+  int32_t _c00, _c10;            //20-bit, 2s compl.
+  int16_t _c01, _c11, _c21, _c20, _c30;  //16-bit, 2s compl.
+  double _presOffset = 0;    // Pascals
+  double _tempOffset = 0;    // Degrees C
 
-    // Caches oversample rates & scaling factors
-    SPL07_Oversample_Rates _presOversample;
-    SPL07_Oversample_Rates _tempOversample;
-    const uint32_t _SPL07_SCALE_FACTORS[8] = {524288, 1572864, 3670016, 7864320,
-                                              253952, 516096,  1040384, 2088960};
+  // Caches oversample rates & scaling factors
+  SPL07_Oversample_Rates _presOversample;
+  SPL07_Oversample_Rates _tempOversample;
+  const uint32_t _SPL07_SCALE_FACTORS[8] = {524288, 1572864, 3670016, 7864320,
+                                            253952, 516096,  1040384, 2088960};
 
 
-  public:
-    SPL07_003();   // Constructor
-    ~SPL07_003();  // Destructor
+public:
+  SPL07_003();   // Constructor
+  ~SPL07_003();  // Destructor
 
-    // Mode & Sampling Settings
-    void setMode(SPL07_Modes mode);
-    void setPressureConfig(SPL07_Measure_Rates rate, SPL07_Oversample_Rates oversample);
-    void setTemperatureConfig(SPL07_Measure_Rates rate, SPL07_Oversample_Rates oversample);
-    void setTemperatureSource(SPL07_Temperature_Source src);
+  // Mode & Sampling Settings
+  void setMode(SPL07_Modes mode);
+  void setPressureConfig(SPL07_Measure_Rates rate, SPL07_Oversample_Rates oversample);
+  void setTemperatureConfig(SPL07_Measure_Rates rate, SPL07_Oversample_Rates oversample);
+  void setTemperatureSource(SPL07_Temperature_Source src);
 
-    // Interrupt Settings (7.6 + 7.7)
-    void setInterruptActiveHigh(bool activeHigh);
-    void configureInterrupt(SPL07_Interrupt_Options opt);
-    uint8_t getInterruptStatus();
-    
-    // Fresh Data Checks (7.5)
-    bool pressureAvailable();
-    bool temperatureAvailable();
+  // Interrupt Settings (7.6 + 7.7)
+  void setInterruptActiveHigh(bool activeHigh);
+  void configureInterrupt(SPL07_Interrupt_Options opt);
+  uint8_t getInterruptStatus();
 
-    // Offset Configs
-    void setPressureOffset(double offset);
-    void setTemperatureOffset(double offset);
-    
-    // Start + Reset
-    void reset();
-    bool begin(uint8_t addr = SPL07_ADDR_DEF, TwoWire *wire = &Wire, uint8_t id = SPL07_EXPECTED_ID);
+  // Fresh Data Checks (7.5)
+  bool pressureAvailable();
+  bool temperatureAvailable();
 
-    // Reading Values
-    double readPressure();
-    double readTemperature();
-    double calcAltitude();
+  // Offset Configs
+  void setPressureOffset(double offset);
+  void setTemperatureOffset(double offset);
+
+  // Start + Reset
+  void reset();
+  bool begin(uint8_t addr = SPL07_ADDR_DEF, TwoWire *wire = &Wire, uint8_t id = SPL07_EXPECTED_ID);
+  bool begin(uint8_t csPin, SPIClass *spi = &SPI, uint8_t id = SPL07_EXPECTED_ID);
+
+  // Reading Values
+  double readPressure();
+  double readTemperature();
+  double calcAltitude();
 
 }; //SPL07_003 Class
 

@@ -1,20 +1,11 @@
-/*
- * Author: Kennan / Kenneract
- * GitHub: https://github.com/Kenneract/SPL07-003-Arduino-Library
- * Created: Mar.15.2025
- * Updated: Apr.14.2025, V1.0.0
- * Purpose: Example usage for the SPL07-003 sensor library. Connects
- *          to the sensor, configures the measurement and oversampling
- *          rate, sets the SPL07-003 to continuous sampling mode, then
- *          prints pressure/temperature measurements to the serial monitor.
- */
-
-#include <Wire.h>
+#include <SPI.h>
 #include "SPL07-003.h"
+
 
 // Define SPL07-006 I2C address
 #define SPL07_ADDR SPL07_ADDR_DEF // Default I2C address (SDO=high)
 // #define SPL07_ADDR SPL07_ADDR_ALT // Alternate I2C address (SDO=low)
+#define SS 1 //Define your own SPI pins
 
 // Create SPL07-003 sensor instance
 SPL07_003 spl;
@@ -27,13 +18,11 @@ void setup() {
   // Begin Serial
   Serial.begin(115200);
 
-  // Configure & start I2C
-  //Wire.setSDA(PB7); //for STM32F103C8Tx
-  //Wire.setSCL(PB6); //for STM32F103C8Tx
-  Wire.begin();
+  // Configure & start SPI
+  SPI.begin();
 
   // Connect to SPL07-003
-  if (spl.begin(SPL07_ADDR,&Wire) == false) {
+  if (spl.begin(SS,&SPI) == false) {
     Serial.println("Error initializing SPL07-003 :(");
     while (1) {}
   }//if

@@ -39,24 +39,38 @@ int32_t SPL07_003::_twosCompliment(uint32_t raw, uint8_t numBits) {
   return ((int32_t)(raw << (32-numBits))) >> (32-numBits);
 }//_twosCompliment()
 
-
 /*
    Reads the byte (uint8_t) stored in the given register
 */
 uint8_t SPL07_003::_regReadByte(uint8_t reg) {
-  // Request data from given register
-  _i2cWire->beginTransmission(_i2cAddr);
-  _i2cWire->write(reg);
-  _i2cWire->endTransmission(false); //keep bus active
-  _i2cWire->requestFrom(_i2cAddr, 1);
-  // Return the provided response, if any
-  if (_i2cWire->available()) {
-    return _i2cWire->read();
-  }//if (avail)
+  uint8_t value = 0;
+  if (_workMode == SPL07_IIC) {
+    // Request data from given register
+    _i2cWire->beginTransmission(_i2cAddr);
+    _i2cWire->write(reg);
+    _i2cWire->endTransmission(false); //keep bus active
+    _i2cWire->requestFrom(_i2cAddr, 1);
+    // Return the provided response, if any
+    if (_i2cWire->available()) {
+      value = _i2cWire->read();
+      return value;
+    }//if (avail)
+  } else if (_workMode == SPL07_SPI) {
+    _spi->beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
+    digitalWrite(_csPin, LOW);
+
+    // Send the register address with the read flag (highest bit is 1)
+    _spi->transfer(reg | 0x80);
+    // Read the response byte
+    value = _spi->transfer(0x00);
+
+    digitalWrite(_csPin, HIGH);
+    _spi->endTransaction();
+    return value;
+  }
   // Return 0 if no data returned
   return 0;
 }//_regReadByte()
-
 
 /*
    Reads and stores the given number of bytes, starting from the
@@ -67,40 +81,72 @@ uint8_t SPL07_003::_regReadByte(uint8_t reg) {
    Returns the actual number of bytes that were received.
 */
 uint8_t SPL07_003::_regReadBytes(uint8_t reg, uint8_t arr[], uint8_t len) {
-  // Request data from given register
-  _i2cWire->beginTransmission(_i2cAddr);
-  _i2cWire->write(reg);
-  _i2cWire->endTransmission(false); //keep bus active
   uint8_t numRecv = 0;
-  numRecv = _i2cWire->requestFrom(_i2cAddr, len);
-  // Store incoming bytes, if any
-  if (_i2cWire->available()) {
-    for (uint8_t i=0; i<numRecv; i++) {
-      arr[i] = _i2cWire->read();
-    }//for (numRecv)
-  }//if (avail)
+  if (_workMode == SPL07_IIC) {
+    // Request data from given register
+    _i2cWire->beginTransmission(_i2cAddr);
+    _i2cWire->write(reg);
+    _i2cWire->endTransmission(false); //keep bus active
+    numRecv = _i2cWire->requestFrom(_i2cAddr, len);
+    // Store incoming bytes, if any
+    if (_i2cWire->available()) {
+      for (uint8_t i=0; i<numRecv; i++) {
+        arr[i] = _i2cWire->read();
+      }//for (numRecv)
+    }//if (avail)
+  } else if (_workMode == SPL07_SPI){
+    _spi->beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
+    digitalWrite(_csPin, LOW);
+
+    // Send the register address with the read flag (highest bit is 1)
+    _spi->transfer(reg | 0x80);
+    // Continuously read 'len' bytes (send dummy data 0x00 to receive data)
+    for (numRecv = 0; numRecv < len; numRecv++) {
+      arr[numRecv] = _spi->transfer(0x00);
+    }
+
+    digitalWrite(_csPin, HIGH);
+    _spi->endTransaction();
+  }
   return numRecv;
 }//_regReadBytes()
 
-
 /*
    Reads up to 4 bytes starting from the given register address.
-  
-   Stores the bytes in a uint32_t, with the first-read byte 
+
+   Stores the bytes in a uint32_t, with the first-read byte
    stored as the MSB.
 */
 uint32_t SPL07_003::_regReadInteger(uint8_t reg, uint8_t len) {
-  // Request data from given register
-  _i2cWire->beginTransmission(_i2cAddr);
-  _i2cWire->write(reg);
-  _i2cWire->endTransmission(false); //keep bus active
-  _i2cWire->requestFrom(_i2cAddr, len);
-  // Parse incoming bytes, if any
   uint32_t outBytes = 0;
-  while (_i2cWire->available()) {
-    outBytes = outBytes << 8;
-    outBytes += _i2cWire->read();
-  }//while (avail)
+  if (_workMode == SPL07_IIC) {
+    // Request data from given register
+    _i2cWire->beginTransmission(_i2cAddr);
+    _i2cWire->write(reg);
+    _i2cWire->endTransmission(false); //keep bus active
+    _i2cWire->requestFrom(_i2cAddr, len);
+    // Parse incoming bytes, if any
+
+    while (_i2cWire->available()) {
+      outBytes = outBytes << 8;
+      outBytes += _i2cWire->read();
+    }//while (avail)
+  } else if (_workMode == SPL07_SPI){
+    // SPI通信方式：读取多字节并组合为整数（MSB优先）
+    _spi->beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
+    digitalWrite(_csPin, LOW);
+
+    // Send the register address with the read flag (highest bit is 1)
+    _spi->transfer(reg | 0x80);
+
+    // 读取len个字节，按MSB到LSB顺序组合
+    for (uint8_t i = 0; i < len; i++) {
+      outBytes = (outBytes << 8) | _spi->transfer(0x00);
+    }
+
+    digitalWrite(_csPin, HIGH);
+    _spi->endTransaction();
+  }
   // Return the provided response, if any
   return outBytes;
 }//_regReadInteger()
@@ -112,11 +158,25 @@ uint32_t SPL07_003::_regReadInteger(uint8_t reg, uint8_t len) {
 void SPL07_003::_regWriteByte(uint8_t reg, uint8_t val) {
   // Ensure any ongoing register write cycle is done
   delay(1);
-  // Send register + value bytes
-  _i2cWire->beginTransmission(_i2cAddr);
-  _i2cWire->write(reg);
-  _i2cWire->write(val);
-  _i2cWire->endTransmission();
+  if (_workMode == SPL07_IIC) {
+    // Send register + value bytes
+    _i2cWire->beginTransmission(_i2cAddr);
+    _i2cWire->write(reg);
+    _i2cWire->write(val);
+    _i2cWire->endTransmission();
+  } else if (_workMode == SPL07_SPI){
+    // SPI通信方式：写入单个字节
+    _spi->beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
+    digitalWrite(_csPin, LOW);
+
+    // Send the register address with the read flag (highest bit is 0)
+    _spi->transfer(reg & 0x7F);
+    _spi->transfer(val);
+
+    digitalWrite(_csPin, HIGH);
+    _spi->endTransaction();
+  }
+
 }//_regWriteByte()
 
 
@@ -154,7 +214,7 @@ void SPL07_003::_readCoefficients() {
   while (!_isolateBit(_regReadByte(SPL07_REG_MEAS_CFG), 7)) {
     delay(1);
   }//while (COEF_RDY is false)
-  
+
   // Read all coefficient bytes
   uint8_t coef[21];
   uint8_t numGot = 0;
@@ -180,7 +240,7 @@ void SPL07_003::_readCoefficients() {
   // Parse C01
   coefTemp = (((uint16_t)coef[8] << 8) & 0xFF00) | coef[9];
   _c01 = _twosCompliment(coefTemp, 16);
-  
+
   // Parse C11
   coefTemp = (((uint16_t)coef[10] << 8) & 0xFF00) | coef[11];
   _c11 = _twosCompliment(coefTemp, 16);
@@ -245,7 +305,7 @@ void SPL07_003::setTemperatureConfig(SPL07_Measure_Rates rate, SPL07_Oversample_
   // CFG_REG[3:3] is T_SHIFT
   uint8_t tShift = (oversample > SPL07_8SAMPLES);
   _regModifyByte(SPL07_REG_CFG_REG, 3, 3, tShift);
-  
+
   // Generate config register value (note bit 3 is reserved)
   uint8_t cfg = ((rate << 4) & 0xF0) | (oversample & 0x0F);
   // Write value to register
@@ -260,7 +320,7 @@ void SPL07_003::setTemperatureConfig(SPL07_Measure_Rates rate, SPL07_Oversample_
    Sets the temperature sensor source
 */
 void SPL07_003::setTemperatureSource(SPL07_Temperature_Source src) {
-  // Write the sensor source to register 
+  // Write the sensor source to register
   // MEAS_CFG[3:3] is TMP_EXT settings
   _regModifyByte(SPL07_REG_MEAS_CFG, 3, 3, src);
 }//setTemperatureSource()
@@ -435,19 +495,21 @@ void SPL07_003::reset() {
    Returns true if successful.
 */
 bool SPL07_003::begin(uint8_t addr, TwoWire *wire, uint8_t id) {
+  // Using I2C mode
+  _workMode = SPL07_IIC;
   // Store parameter info
   _i2cAddr = addr;
   _i2cWire = wire;
 
   // Allow time for hardware init (takes 12ms max)
   delay(12);
-  
+
   // Attempt to connect + read ID
   if (_regReadByte(SPL07_REG_ID) != id) {
     // Sensor not connected or wrong ID
     return false;
   }//if (id matches)
-  
+
   // Reset chip + read coefficients
   reset();
   _readCoefficients();
@@ -461,9 +523,51 @@ bool SPL07_003::begin(uint8_t addr, TwoWire *wire, uint8_t id) {
   setMode(SPL07_CONT_PRES_TEMP);
 
   // Interrupt disabled by default (no change)
-    //SPL07-003 REGISTER DEFAULTS:
-      //Interrupt Polarity = Active Low
-      //Interrupt Function = SPL07_INT_OFF
+  //SPL07-003 REGISTER DEFAULTS:
+  //Interrupt Polarity = Active Low
+  //Interrupt Function = SPL07_INT_OFF
+
+  // Wait for measurements to be available
+  while (!pressureAvailable() && !temperatureAvailable()) {
+    delay(5);
+  }//while (pres & temp not avail)
+
+  return true;
+}//begin()
+
+bool SPL07_003::begin(uint8_t csPin, SPIClass* spi, uint8_t id) {
+  // Using SPI mode
+  _workMode = SPL07_SPI;
+
+  _csPin = csPin;
+  _spi = spi;
+  pinMode(_csPin, OUTPUT);
+  digitalWrite(_csPin, HIGH);
+
+  // Allow time for hardware init (takes 12ms max)
+  delay(12);
+
+  // Attempt to connect + read ID
+  if (_regReadByte(SPL07_REG_ID) != id) {
+    return false;
+  } //if (id matches)
+
+  // Reset chip + read coefficients
+  reset();
+  _readCoefficients();
+
+  // Set pressure sampling to 64Hz high-precision
+  setPressureConfig(SPL07_64HZ, SPL07_64SAMPLES);
+  // Set temperature sampling to 64Hz standard
+  setTemperatureConfig(SPL07_64HZ, SPL07_1SAMPLE);
+
+  // Set mode to continuous temp+pres
+  setMode(SPL07_CONT_PRES_TEMP);
+
+  // Interrupt disabled by default (no change)
+  //SPL07-003 REGISTER DEFAULTS:
+  //Interrupt Polarity = Active Low
+  //Interrupt Function = SPL07_INT_OFF
 
   // Wait for measurements to be available
   while (!pressureAvailable() && !temperatureAvailable()) {
